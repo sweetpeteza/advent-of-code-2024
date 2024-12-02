@@ -1,54 +1,103 @@
 use itertools::Itertools;
+use miette::miette;
+use nom::{
+    character::complete::{self, line_ending, space1},
+    multi::separated_list1,
+    IResult,
+};
+use tracing::instrument;
 
-#[tracing::instrument]
+enum Direction {
+    Increasing,
+    Decreasing,
+}
+
+#[tracing::instrument(skip(input))]
 pub fn process(input: &str) -> miette::Result<String> {
-    let mut reports = vec![];
-
-    for line in input.lines() {
-        let levels: Vec<i32> = line
-            .split_whitespace()
-            .flat_map(|x| x.parse::<i32>())
-            .collect();
-
-        reports.push(levels);
-    }
-
-    let total_safe_tests = reports
+    let (_, reports) = parse(input).map_err(|e| miette!("parse failed {}", e))?;
+    let result = reports
         .iter()
-        .filter(|set| {
-            set.iter().tuple_windows().all(|(curr, next)| curr < next)
-                || set.iter().tuple_windows().all(|(curr, next)| curr > next)
-        })
-        .filter(|set| !set.iter().all_equal())
-        .filter(|set| {
-            (set.iter().tuple_windows().all(|(curr, next)| curr < next)
-                || set.iter().tuple_windows().all(|(curr, next)| curr > next))
-                || ((0..set.len()).any(|d| {
-                    dbg!(&d);
-                    let new_set = set[..d]
-                        .iter()
-                        .chain(&set[d + 1..])
-                        .copied()
-                        .collect::<Vec<i32>>();
-                    dbg!(&new_set);
-                    new_set
-                        .iter()
-                        .tuple_windows()
-                        .all(|(curr, next)| curr < next)
-                        || new_set
-                            .iter()
-                            .tuple_windows()
-                            .all(|(curr, next)| curr > next)
-                }))
-        })
-        .filter(|set| {
-            set.iter()
-                .tuple_windows()
-                .all(|(curr, next)| (curr - next).abs() < 4)
+        .filter(|report| {
+            if check_safety(report).is_err() {
+                for index in 0..report.len() {
+                    let mut new_report = (*report).clone();
+                    new_report.remove(index);
+                    if check_safety(&new_report).is_ok() {
+                        return true;
+                    } else {
+                        continue;
+                    }
+                }
+                false
+            } else {
+                true
+            }
         })
         .count();
+    Ok(result.to_string())
+}
 
-    Ok(total_safe_tests.to_string())
+#[instrument(ret)]
+fn check_safety(report: &Report) -> Result<(), String> {
+    let mut direction: Option<Direction> = None;
+    for (a, b) in report.iter().tuple_windows() {
+        let diff = a - b;
+        match diff.signum() {
+            -1 => match direction {
+                Some(Direction::Increasing) => {
+                    return Err(format!("{}, {} switched to increasing", a, b));
+                }
+                Some(Direction::Decreasing) => {
+                    if !(1..=3).contains(&diff.abs()) {
+                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                    } else {
+                        continue;
+                    }
+                }
+                None => {
+                    if !(1..=3).contains(&diff.abs()) {
+                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                    } else {
+                        direction = Some(Direction::Decreasing);
+                        continue;
+                    }
+                }
+            },
+            1 => match direction {
+                Some(Direction::Increasing) => {
+                    if !(1..=3).contains(&diff) {
+                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                    } else {
+                        continue;
+                    }
+                }
+                Some(Direction::Decreasing) => {
+                    return Err(format!("{}, {} switched to decreasing", a, b));
+                }
+                None => {
+                    if !(1..=3).contains(&diff) {
+                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                    } else {
+                        direction = Some(Direction::Increasing);
+                        continue;
+                    }
+                }
+            },
+            0 => {
+                return Err(format!("{}, {} diff was 0", a, b));
+            }
+            _ => {
+                panic!("should never have a non -1,1,0 number");
+            }
+        }
+    }
+    Ok(())
+}
+
+type Report = Vec<i32>;
+
+fn parse(input: &str) -> IResult<&str, Vec<Report>> {
+    separated_list1(line_ending, separated_list1(space1, complete::i32))(input)
 }
 
 #[cfg(test)]
@@ -57,30 +106,12 @@ mod tests {
 
     #[test]
     fn test_process() -> miette::Result<()> {
-        let input = "
-7 6 4 2 1
+        let input = "7 6 4 2 1
 1 2 7 8 9
 9 7 6 2 1
 1 3 2 4 5
 8 6 4 4 1
 1 3 6 7 9";
-        /*
-        7 6 4 2 1
-        1 2 7 8 9
-        9 7 6 2 1
-        1 _ 2 4 5
-        8 6 _ 4 1
-        1 3 6 7 9 */
-        assert_eq!("4", process(input)?);
-        Ok(())
-    }
-    #[test]
-    fn should_pass() -> miette::Result<()> {
-        let input = "
-    55 55 58 59 62 64
-    71 71 72 73 77 78
-";
-
         assert_eq!("4", process(input)?);
         Ok(())
     }
