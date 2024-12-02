@@ -17,20 +17,19 @@ pub fn process(input: &str) -> miette::Result<String> {
     let (_, reports) = parse(input).map_err(|e| miette!("parse failed {}", e))?;
     let result = reports
         .iter()
-        .filter(|report| {
-            if check_safety(report).is_err() {
+        .filter(|report| match check_safety(report) {
+            Ok(_) => true,
+            Err(_) => {
                 for index in 0..report.len() {
                     let mut new_report = (*report).clone();
                     new_report.remove(index);
-                    if check_safety(&new_report).is_ok() {
-                        return true;
-                    } else {
-                        continue;
+
+                    match check_safety(&new_report) {
+                        Ok(_) => return true,
+                        Err(_) => continue,
                     }
                 }
                 false
-            } else {
-                true
             }
         })
         .count();
@@ -39,55 +38,56 @@ pub fn process(input: &str) -> miette::Result<String> {
 
 #[instrument(ret)]
 fn check_safety(report: &Report) -> Result<(), String> {
+    use Direction::*;
     let mut direction: Option<Direction> = None;
     for (a, b) in report.iter().tuple_windows() {
         let diff = a - b;
         match diff.signum() {
             -1 => match direction {
-                Some(Direction::Increasing) => {
-                    return Err(format!("{}, {} switched to increasing", a, b));
+                Some(Increasing) => {
+                    return Err(format!("{};{} now increasing", a, b));
                 }
-                Some(Direction::Decreasing) => {
+                Some(Decreasing) => {
                     if !(1..=3).contains(&diff.abs()) {
-                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                        return Err(format!("{};{} diff of {}", a, b, diff.abs()));
                     } else {
                         continue;
                     }
                 }
                 None => {
                     if !(1..=3).contains(&diff.abs()) {
-                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                        return Err(format!("{};{} diff of {}", a, b, diff.abs()));
                     } else {
-                        direction = Some(Direction::Decreasing);
+                        direction = Some(Decreasing);
                         continue;
                     }
                 }
             },
             1 => match direction {
-                Some(Direction::Increasing) => {
+                Some(Increasing) => {
                     if !(1..=3).contains(&diff) {
-                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                        return Err(format!("{};{} diff of {}", a, b, diff.abs()));
                     } else {
                         continue;
                     }
                 }
-                Some(Direction::Decreasing) => {
-                    return Err(format!("{}, {} switched to decreasing", a, b));
+                Some(Decreasing) => {
+                    return Err(format!("{};{} now decreasing", a, b));
                 }
                 None => {
                     if !(1..=3).contains(&diff) {
-                        return Err(format!("{}, {} diff value is {}", a, b, diff.abs()));
+                        return Err(format!("{};{} diff of {}", a, b, diff.abs()));
                     } else {
-                        direction = Some(Direction::Increasing);
+                        direction = Some(Increasing);
                         continue;
                     }
                 }
             },
             0 => {
-                return Err(format!("{}, {} diff was 0", a, b));
+                return Err(format!("{};{} has no diff", a, b));
             }
             _ => {
-                panic!("should never have a non -1,1,0 number");
+                panic!("I didn't park my car here");
             }
         }
     }
