@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[tracing::instrument]
 pub fn process(input: &str) -> miette::Result<String> {
     let mut left = vec![];
@@ -5,26 +7,24 @@ pub fn process(input: &str) -> miette::Result<String> {
 
     for line in input.lines() {
         let mut items = line.split_whitespace();
-        left.push(
-            items.next().unwrap().parse::<usize>().unwrap(),
-        );
-        right.push(
-            items.next().unwrap().parse::<usize>().unwrap(),
-        );
+
+        left.push(items.next().unwrap().parse::<i32>().unwrap());
+        right.push(items.next().unwrap().parse::<i32>().unwrap());
     }
 
-    let result: usize = left
+    let mut right_totals: HashMap<i32, i32> = HashMap::new();
+
+    for &num in &right {
+        *right_totals.entry(num).or_insert(0) += 1;
+    }
+
+    let similarity_score: i32 = left
         .iter()
-        .map(|number| {
-            number
-                * right
-                    .iter()
-                    .filter(|r| &number == r)
-                    .count()
-        })
+        .map(|x| x * right_totals.get(x).unwrap_or(&0))
         .sum();
 
-    Ok(result.to_string())
+    dbg!(&similarity_score);
+    Ok(similarity_score.to_string())
 }
 
 #[cfg(test)]

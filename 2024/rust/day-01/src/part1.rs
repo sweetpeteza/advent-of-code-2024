@@ -5,22 +5,21 @@ pub fn process(input: &str) -> miette::Result<String> {
 
     for line in input.lines() {
         let mut items = line.split_whitespace();
-        left.push(
-            items.next().unwrap().parse::<i32>().unwrap(),
-        );
-        right.push(
-            items.next().unwrap().parse::<i32>().unwrap(),
-        );
+
+        left.push(items.next().unwrap().parse::<i32>().unwrap());
+        right.push(items.next().unwrap().parse::<i32>().unwrap());
     }
 
     left.sort();
     right.sort();
 
-    let result: i32 = std::iter::zip(left, right)
+    let total_distance: i32 = left
+        .iter()
+        .zip(right.iter())
         .map(|(l, r)| (l - r).abs())
-        .sum();
+        .sum::<i32>();
 
-    Ok(result.to_string())
+    Ok(total_distance.to_string())
 }
 
 #[cfg(test)]
